@@ -1,0 +1,14 @@
+# Compiled binaries
+tuner
+tuner.exe
+tuner.test
+*.out
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Temporary runtime files
+/tmp/tuner.*
+*.tmp
