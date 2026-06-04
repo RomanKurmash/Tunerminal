@@ -60,3 +60,43 @@ func TestSilence(t *testing.T) {
 		t.Errorf("Expected 0.0 for silence, got %.2f Hz", detectedFreq)
 	}
 }
+
+func TestStringMatching(t *testing.T) {
+	tests := []struct {
+		note     string
+		octave   int
+		tuning   string
+		expected int
+	}{
+		{"E", 2, "E Standard", 6},
+		{"A", 2, "E Standard", 5},
+		{"D", 3, "E Standard", 4},
+		{"G", 3, "E Standard", 3},
+		{"B", 3, "E Standard", 2},
+		{"E", 4, "E Standard", 1},
+		{"F", 2, "E Standard", 0}, // not a string
+
+		{"D", 2, "D Standard", 6},
+		{"G", 2, "D Standard", 5},
+		{"C", 3, "D Standard", 4},
+		{"F", 3, "D Standard", 3},
+		{"A", 3, "D Standard", 2},
+		{"D", 4, "D Standard", 1},
+
+		{"D", 2, "Drop D", 6},
+		{"A", 2, "Drop D", 5},
+		{"E", 4, "Drop D", 1},
+
+		{"C", 2, "Drop C", 6},
+		{"G", 2, "Drop C", 5},
+		{"D", 4, "Drop C", 1},
+	}
+
+	for _, tt := range tests {
+		got := GetStringNumber(tt.note, tt.octave, tt.tuning)
+		if got != tt.expected {
+			t.Errorf("GetStringNumber(%q, %d, %q) = %d; expected %d",
+				tt.note, tt.octave, tt.tuning, got, tt.expected)
+		}
+	}
+}

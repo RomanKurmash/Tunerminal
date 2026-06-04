@@ -46,6 +46,78 @@ func FrequencyToPitch(freq float64, rms float64) PitchInfo {
 	}
 }
 
+// GetStringNumber returns the string number (1 to 6) for the given note and octave under the selected tuning.
+// Returns 0 if the note is not a target string note in that tuning.
+func GetStringNumber(note string, octave int, tuning string) int {
+	if octave < 0 || octave > 9 {
+		return 0
+	}
+	noteOctave := note + string(rune('0'+octave))
+	switch tuning {
+	case "E Standard":
+		switch noteOctave {
+		case "E2":
+			return 6
+		case "A2":
+			return 5
+		case "D3":
+			return 4
+		case "G3":
+			return 3
+		case "B3":
+			return 2
+		case "E4":
+			return 1
+		}
+	case "D Standard":
+		switch noteOctave {
+		case "D2":
+			return 6
+		case "G2":
+			return 5
+		case "C3":
+			return 4
+		case "F3":
+			return 3
+		case "A3":
+			return 2
+		case "D4":
+			return 1
+		}
+	case "Drop D":
+		switch noteOctave {
+		case "D2":
+			return 6
+		case "A2":
+			return 5
+		case "D3":
+			return 4
+		case "G3":
+			return 3
+		case "B3":
+			return 2
+		case "E4":
+			return 1
+		}
+	case "Drop C":
+		switch noteOctave {
+		case "C2":
+			return 6
+		case "G2":
+			return 5
+		case "C3":
+			return 4
+		case "F3":
+			return 3
+		case "A3":
+			return 2
+		case "D4":
+			return 1
+		}
+	}
+	return 0
+}
+
 // CalculateRMS computes the root-mean-square amplitude of the buffer.
 // This is used for noise gating (ignoring silence).
 func CalculateRMS(buffer []float64) float64 {

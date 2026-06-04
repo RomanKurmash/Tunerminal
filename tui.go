@@ -214,7 +214,7 @@ func ClearActiveTuner(tty io.Writer) {
 }
 
 // DrawCenteredTuner renders a centered watermark-like tuner to /dev/tty.
-func DrawCenteredTuner(tty io.Writer, info PitchInfo, lang string) {
+func DrawCenteredTuner(tty io.Writer, info PitchInfo, lang string, tuning string) {
 	rows, cols, err := getTerminalSize(tty)
 	if err != nil {
 		rows, cols = 24, 80 // fallback
@@ -259,8 +259,15 @@ func DrawCenteredTuner(tty io.Writer, info PitchInfo, lang string) {
 	// Row 1: Top Border
 	fmt.Fprintf(tty, "\033[%d;%dH%s%s┌──────────────────────────────────────────────┐%s", startRow, startCol, Dim, Cyan, Reset)
 
-	// Row 2: Header
-	headerText := labels.Header
+	// Row 2: Header (showing selected tuning)
+	tuningShort := tuning
+	switch tuning {
+	case "E Standard":
+		tuningShort = "E Std"
+	case "D Standard":
+		tuningShort = "D Std"
+	}
+	headerText := fmt.Sprintf("%s (%s)", labels.Header, tuningShort)
 	padding := (46 - len([]rune(headerText))) / 2
 	if padding < 0 {
 		padding = 0
@@ -279,6 +286,14 @@ func DrawCenteredTuner(tty io.Writer, info PitchInfo, lang string) {
 		noteColor = Dim
 	} else {
 		noteStr = fmt.Sprintf("%s%d", info.Note, info.Octave)
+		strNum := GetStringNumber(info.Note, info.Octave, tuning)
+		if strNum > 0 {
+			if lang == "uk" {
+				noteStr = fmt.Sprintf("%s%d (Струна %d)", info.Note, info.Octave, strNum)
+			} else {
+				noteStr = fmt.Sprintf("%s%d (String %d)", info.Note, info.Octave, strNum)
+			}
+		}
 		if info.InTune {
 			noteColor = Dim + Green
 		} else {
@@ -356,7 +371,7 @@ func DrawCenteredTuner(tty io.Writer, info PitchInfo, lang string) {
 	fmt.Fprintf(tty, "\033[%d;%dH%s%s└──────────────────────────────────────────────┘%s", startRow+9, startCol, Dim, Cyan, Reset)
 
 	// Row 11: Hints
-	hintText := "stop tuner | tuner lang"
+	hintText := "stop tuner | tuner settings"
 	hintPadding := (48 - len(hintText)) / 2
 	if hintPadding < 0 {
 		hintPadding = 0

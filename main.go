@@ -16,21 +16,49 @@ const (
 	pidFile         = "/tmp/tuner.pid"
 )
 
-func getLanguage() string {
-	data, err := os.ReadFile("/home/romankurmash/.config/tuner/lang.conf")
-	if err != nil {
-		return "uk" // default to Ukrainian
-	}
-	lang := string(data)
-	if lang == "en" || lang == "uk" {
-		return lang
-	}
-	return "uk"
+type Config struct {
+	Language string `json:"language"`
+	Tuning   string `json:"tuning"`
 }
 
-func setLanguage(lang string) {
+func loadConfig() Config {
+	data, err := os.ReadFile("/home/romankurmash/.config/tuner/config.json")
+	if err != nil {
+		// Fallback to legacy config or defaults
+		lang := "uk"
+		legacyLang, err := os.ReadFile("/home/romankurmash/.config/tuner/lang.conf")
+		if err == nil {
+			lang = string(legacyLang)
+		}
+		return Config{Language: lang, Tuning: "D Standard"}
+	}
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return Config{Language: "uk", Tuning: "D Standard"}
+	}
+	if cfg.Language == "" {
+		cfg.Language = "uk"
+	}
+	if cfg.Tuning == "" {
+		cfg.Tuning = "D Standard"
+	}
+	return cfg
+}
+
+func saveConfig(cfg Config) {
 	_ = os.MkdirAll("/home/romankurmash/.config/tuner", 0755)
-	_ = os.WriteFile("/home/romankurmash/.config/tuner/lang.conf", []byte(lang), 0644)
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err == nil {
+		_ = os.WriteFile("/home/romankurmash/.config/tuner/config.json", data, 0644)
+	}
+}
+
+func getLanguage() string {
+	return loadConfig().Language
+}
+
+func getTuning() string {
+	return loadConfig().Tuning
 }
 
 func main() {
@@ -39,8 +67,8 @@ func main() {
 		case "stop":
 			stopDaemon()
 			return
-		case "lang":
-			runLangMenu()
+		case "settings", "lang":
+			runSettingsMenu()
 			return
 		case "--daemon-draw":
 			runDaemonDrawMode()
@@ -73,7 +101,7 @@ func printHelp() {
 	fmt.Println("\nCommands:")
 	fmt.Println("  tuner                 Start the tuner in the background drawing to this terminal")
 	fmt.Println("  tuner stop            Stop the background tuner (or use 'stop tuner')")
-	fmt.Println("  tuner lang            Open interface language selection (English/Українська)")
+	fmt.Println("  tuner settings        Open tuner settings (Language and Tuning)")
 	fmt.Println("  tuner foreground      Run tuner in the foreground")
 	fmt.Println("  tuner --status        Print current tuning status once and exit")
 	fmt.Println("  tuner --daemon        Run silently in background (only updates /tmp/tuner.status)")
@@ -90,15 +118,41 @@ func setRawMode(raw bool) {
 	_ = cmd.Run()
 }
 
-func runLangMenu() {
+func runSettingsMenu() {
 	// Write pause lock file to temporarily stop background daemon drawing
 	_ = os.WriteFile("/tmp/tuner.pause", []byte("1"), 0644)
 	defer os.Remove("/tmp/tuner.pause")
 
-	selected := 0
-	if getLanguage() == "uk" {
-		selected = 1
+	cfg := loadConfig()
+	selectedRow := 0 // 0: Language, 1: Tuning, 2: Save, 3: Cancel
+
+	languages := []string{"en", "uk"}
+	langLabels := map[string]string{
+		"en": "English",
+		"uk": "Українська",
 	}
+
+	tunings := []string{"E Standard", "D Standard", "Drop D", "Drop C"}
+
+	getLangIdx := func(l string) int {
+		for i, v := range languages {
+			if v == l {
+				return i
+			}
+		}
+		return 0
+	}
+	getTuningIdx := func(t string) int {
+		for i, v := range tunings {
+			if v == t {
+				return i
+			}
+		}
+		return 0
+	}
+
+	langIdx := getLangIdx(cfg.Language)
+	tuningIdx := getTuningIdx(cfg.Tuning)
 
 	setRawMode(true)
 	defer setRawMode(false)
@@ -108,19 +162,47 @@ func runLangMenu() {
 
 	for {
 		fmt.Print("\033[H")
-		fmt.Print("Select interface language / Оберіть мову інтерфейсу:\r\n")
-		fmt.Print("--------------------------------------------------\r\n")
-		if selected == 0 {
-			fmt.Print(" > English  (Selected)\r\n")
-			fmt.Print("   Українська\r\n")
+		fmt.Print("=== TUNER SETTINGS / НАЛАШТУВАННЯ ТЮНЕРА ===\r\n")
+		fmt.Print("--------------------------------------------\r\n")
+
+		// Row 0: Language
+		langLabel := "  Language / Мова: "
+		if selectedRow == 0 {
+			fmt.Printf(" > Language / Мова:   < %s >\r\n", langLabels[languages[langIdx]])
 		} else {
-			fmt.Print("   English\r\n")
-			fmt.Print(" > Українська  (Обрано)\r\n")
+			fmt.Printf("%s    %s\r\n", langLabel, langLabels[languages[langIdx]])
 		}
-		fmt.Print("--------------------------------------------------\r\n")
-		fmt.Print("Use Up/Down Arrow keys and press Enter to save.\r\n")
-		fmt.Print("Використовуйте стрілки Вгору/Вниз та натисніть Enter.\r\n")
-		fmt.Print("\r\nPress Ctrl+C or Escape to cancel / Ctrl+C або Escape для скасування.\r\n")
+
+		// Row 1: Tuning
+		tuningLabel := "  Tuning / Стрій:   "
+		if selectedRow == 1 {
+			fmt.Printf(" > Tuning / Стрій:     < %s >\r\n", tunings[tuningIdx])
+		} else {
+			fmt.Printf("%s    %s\r\n", tuningLabel, tunings[tuningIdx])
+		}
+
+		fmt.Print("\r\n")
+
+		// Row 2: Save
+		if selectedRow == 2 {
+			fmt.Print(" > [ Save & Exit / Зберегти та вийти ]\r\n")
+		} else {
+			fmt.Print("   [ Save & Exit / Зберегти та вийти ]\r\n")
+		}
+
+		// Row 3: Cancel
+		if selectedRow == 3 {
+			fmt.Print(" > [ Cancel / Скасувати ]\r\n")
+		} else {
+			fmt.Print("   [ Cancel / Скасувати ]\r\n")
+		}
+
+		fmt.Print("--------------------------------------------\r\n")
+		fmt.Print("Use Up/Down Arrow keys to navigate.\r\n")
+		fmt.Print("Використовуйте стрілки Вгору/Вниз для навігації.\r\n")
+		fmt.Print("Use Left/Right Arrow keys to change values.\r\n")
+		fmt.Print("Використовуйте стрілки Вліво/Вправо для зміни значень.\r\n")
+		fmt.Print("\r\nPress Escape or Ctrl+C to cancel / Escape або Ctrl+C для скасування.\r\n")
 
 		var buf [3]byte
 		n, err := os.Stdin.Read(buf[:])
@@ -131,24 +213,52 @@ func runLangMenu() {
 		if n == 1 {
 			if buf[0] == '\r' || buf[0] == '\n' {
 				// Enter pressed
-				if selected == 0 {
-					setLanguage("en")
-					fmt.Print("\033[H\033[2J\r\nSaved! Language set to English.\r\n")
-				} else {
-					setLanguage("uk")
-					fmt.Print("\033[H\033[2J\r\nЗбережено! Мову змінено на Українську.\r\n")
+				if selectedRow == 2 {
+					// Save
+					cfg.Language = languages[langIdx]
+					cfg.Tuning = tunings[tuningIdx]
+					saveConfig(cfg)
+					if cfg.Language == "uk" {
+						fmt.Print("\033[H\033[2J\r\nНалаштування збережено!\r\n")
+					} else {
+						fmt.Print("\033[H\033[2J\r\nSettings saved!\r\n")
+					}
+					break
+				} else if selectedRow == 3 {
+					// Cancel
+					if cfg.Language == "uk" {
+						fmt.Print("\033[H\033[2JСкасовано.\r\n")
+					} else {
+						fmt.Print("\033[H\033[2JCancelled.\r\n")
+					}
+					break
 				}
-				break
 			}
 			if buf[0] == 3 || buf[0] == 27 { // Ctrl+C or Escape
-				fmt.Print("\033[H\033[2JCancelled / Скасовано.\r\n")
+				if cfg.Language == "uk" {
+					fmt.Print("\033[H\033[2JСкасовано.\r\n")
+				} else {
+					fmt.Print("\033[H\033[2JCancelled.\r\n")
+				}
 				break
 			}
 		} else if n == 3 && buf[0] == '\033' && buf[1] == '[' {
 			if buf[2] == 'A' { // Up
-				selected = 0
+				selectedRow = (selectedRow - 1 + 4) % 4
 			} else if buf[2] == 'B' { // Down
-				selected = 1
+				selectedRow = (selectedRow + 1) % 4
+			} else if buf[2] == 'D' { // Left
+				if selectedRow == 0 {
+					langIdx = (langIdx - 1 + len(languages)) % len(languages)
+				} else if selectedRow == 1 {
+					tuningIdx = (tuningIdx - 1 + len(tunings)) % len(tunings)
+				}
+			} else if buf[2] == 'C' { // Right
+				if selectedRow == 0 {
+					langIdx = (langIdx + 1) % len(languages)
+				} else if selectedRow == 1 {
+					tuningIdx = (tuningIdx + 1) % len(tunings)
+				}
 			}
 		}
 	}
@@ -304,8 +414,8 @@ func runDaemonDrawMode() {
 			continue
 		}
 
-		lang := getLanguage()
-		DrawCenteredTuner(tty, info, lang)
+		cfg := loadConfig()
+		DrawCenteredTuner(tty, info, cfg.Language, cfg.Tuning)
 		writeStatusAtomically(info)
 	}
 }
@@ -369,8 +479,8 @@ func runForegroundMode() {
 			info = FrequencyToPitch(0, rms)
 		}
 
-		lang := getLanguage()
-		DrawCenteredTuner(tty, info, lang)
+		cfg := loadConfig()
+		DrawCenteredTuner(tty, info, cfg.Language, cfg.Tuning)
 	}
 }
 
